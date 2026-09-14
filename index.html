@@ -17,6 +17,13 @@ button{cursor:pointer;font-weight:700}button.primary{background:var(--accent);bo
 .format-buttons{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:4px}
 .format-btn{background:#0f172a;color:var(--text);border:1px solid var(--border);padding:9px 8px;min-height:42px}
 .format-btn.active{background:var(--accent);border-color:var(--accent);color:#fff}
+.organize-box{margin-top:16px;border:1px solid var(--border);border-radius:12px;padding:12px;background:rgba(255,255,255,.02)}
+.organize-toggle{display:flex;align-items:center;gap:9px;margin:0;cursor:pointer;color:var(--text)}
+.organize-toggle input{width:18px;height:18px;min-height:0;margin:0;accent-color:var(--accent)}
+.organize-controls{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px}
+.organize-controls[hidden]{display:none}
+.organize-controls .full{grid-column:1/-1}
+.organize-note{grid-column:1/-1;margin:0;color:var(--muted);font-size:.82rem;line-height:1.45}
 .actions{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:16px}.stats{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}.pill{border:1px solid var(--border);border-radius:999px;padding:5px 9px;color:var(--muted);font-size:.85rem}
 .guide-box{margin-top:16px;border:1px solid var(--border);border-radius:12px;background:rgba(255,255,255,.025);padding:14px}
 .guide-box h3{margin:0 0 8px;font-size:1rem}
@@ -76,6 +83,56 @@ Or paste cells directly from Excel"></textarea>
 <label for="empty">Empty final cells</label>
 <input id="empty" value="" placeholder="Leave blank, or enter N/A">
 
+<div class="organize-box">
+  <label class="organize-toggle">
+    <input id="organizeEnabled" type="checkbox">
+    <span>Enable sorting &amp; grouping</span>
+  </label>
+
+  <div class="organize-controls" id="organizeControls" hidden>
+    <div>
+      <label for="sortBy">Sort by</label>
+      <select id="sortBy">
+        <option value="original">Original order</option>
+        <option value="ip">IP address</option>
+        <option value="subnet">Subnet</option>
+        <option value="port">Port</option>
+      </select>
+    </div>
+
+    <div>
+      <label for="sortDirection">Direction</label>
+      <select id="sortDirection">
+        <option value="asc">Ascending</option>
+        <option value="desc">Descending</option>
+      </select>
+    </div>
+
+    <div>
+      <label for="groupBy">Group by</label>
+      <select id="groupBy">
+        <option value="none">No grouping</option>
+        <option value="subnet">Subnet</option>
+        <option value="port">Port</option>
+      </select>
+    </div>
+
+    <div>
+      <label for="subnetPrefix">Subnet prefix</label>
+      <select id="subnetPrefix">
+        <option value="8">/8</option>
+        <option value="16">/16</option>
+        <option value="24" selected>/24</option>
+      </select>
+    </div>
+
+    <p class="organize-note">
+      Grouping keeps matching values adjacent without adding header rows to your copied/exported data.
+      Entries without a detectable IP or port are kept at the end of that group.
+    </p>
+  </div>
+</div>
+
 <div class="actions">
 <button class="primary" id="copy">Copy</button>
 <button id="download">Download</button>
@@ -102,6 +159,8 @@ Or paste cells directly from Excel"></textarea>
 <script>
 const $=id=>document.getElementById(id);
 const input=$("input"),format=$("format"),columns=$("columns"),delimiter=$("delimiter"),empty=$("empty"),
+organizeEnabled=$("organizeEnabled"),organizeControls=$("organizeControls"),sortBy=$("sortBy"),
+sortDirection=$("sortDirection"),groupBy=$("groupBy"),subnetPrefix=$("subnetPrefix"),
 customBox=$("customBox"),tablePreview=$("tablePreview"),textPreview=$("textPreview"),toast=$("toast");
 
 const hints={
@@ -167,6 +226,93 @@ function colCount(){
   const n=parseInt(columns.value,10);
   return Number.isFinite(n)?Math.max(1,Math.min(20,n)):4;
 }
+
+function parseEndpoint(value){
+  const text=String(value??"").trim();
+  const match=text.match(/^(\d{1,3}(?:\.\d{1,3}){3})(?::(\d+))?$/);
+  if(!match)return {text,ip:null,octets:null,port:null};
+  const octets=match[1].split(".").map(Number);
+  if(octets.some(n=>n<0||n>255))return {text,ip:null,octets:null,port:null};
+  const port=match[2]!==undefined?Number(match[2]):null;
+  return {
+    text,
+    ip:match[1],
+    octets,
+    port:Number.isInteger(port)&&port>=0&&port<=65535?port:null
+  };
+}
+
+function ipNumber(octets){
+  if(!octets)return null;
+  return (((octets[0]*256+octets[1])*256+octets[2])*256+octets[3]);
+}
+
+function subnetKey(endpoint){
+  if(!endpoint.octets)return null;
+  const prefix=Number(subnetPrefix.value)||24;
+  const count=prefix===8?1:prefix===16?2:3;
+  const parts=endpoint.octets.slice(0,count);
+  while(parts.length<4)parts.push(0);
+  return {
+    label:`${parts.join(".")}/${prefix}`,
+    numeric:ipNumber(parts)
+  };
+}
+
+function keyFor(endpoint,type){
+  if(type==="ip"){
+    const n=ipNumber(endpoint.octets);
+    return n===null?null:{numeric:n,label:endpoint.ip};
+  }
+  if(type==="subnet")return subnetKey(endpoint);
+  if(type==="port"){
+    return endpoint.port===null?null:{numeric:endpoint.port,label:String(endpoint.port)};
+  }
+  return null;
+}
+
+function compareKeys(a,b,direction){
+  const missingA=a===null,missingB=b===null;
+  if(missingA&&missingB)return 0;
+  if(missingA)return 1;
+  if(missingB)return -1;
+
+  let result=0;
+  if(Number.isFinite(a.numeric)&&Number.isFinite(b.numeric)){
+    result=a.numeric-b.numeric;
+  }else{
+    result=String(a.label).localeCompare(String(b.label),undefined,{numeric:true,sensitivity:"base"});
+  }
+  return direction==="desc"?-result:result;
+}
+
+function organizeItems(items){
+  if(!organizeEnabled.checked)return items.slice();
+
+  const direction=sortDirection.value;
+  const grouping=groupBy.value;
+  const sorting=sortBy.value;
+
+  const decorated=items.map((value,index)=>({
+    value,index,endpoint:parseEndpoint(value)
+  }));
+
+  decorated.sort((a,b)=>{
+    if(grouping!=="none"){
+      const grouped=compareKeys(keyFor(a.endpoint,grouping),keyFor(b.endpoint,grouping),direction);
+      if(grouped!==0)return grouped;
+    }
+
+    if(sorting!=="original"){
+      const sorted=compareKeys(keyFor(a.endpoint,sorting),keyFor(b.endpoint,sorting),direction);
+      if(sorted!==0)return sorted;
+    }
+
+    return a.index-b.index;
+  });
+
+  return decorated.map(x=>x.value);
+}
 function makeRows(items){
   const c=colCount(),out=[];
   for(let i=0;i<items.length;i+=c){
@@ -203,7 +349,7 @@ function htmlTable(rows,withHeader=false){
   return h+"</table>";
 }
 function render(){
-  const items=parseItems(),rows=makeRows(items),mode=format.value;
+  const rawItems=parseItems(),items=organizeItems(rawItems),rows=makeRows(items),mode=format.value;
   $("count").textContent=`${items.length} ${items.length===1?"entry":"entries"}`;
   $("rows").textContent=`${rows.length} ${rows.length===1?"row":"rows"}`;
   $("hint").textContent=hints[mode];
@@ -211,6 +357,7 @@ function render(){
   $("guideTitle").textContent=guide.title;
   $("guideSteps").innerHTML=guide.steps.map(step=>`<li>${step}</li>`).join("");
   customBox.hidden=mode!=="custom";
+  organizeControls.hidden=!organizeEnabled.checked;
   if(mode==="word"){
     tablePreview.hidden=false;textPreview.hidden=true;
     tablePreview.innerHTML=rows.length?htmlTable(rows,true):'<p style="padding:16px">Nothing to preview.</p>';
@@ -224,8 +371,8 @@ function notify(msg){
   clearTimeout(notify.t);notify.t=setTimeout(()=>toast.classList.remove("show"),1600);
 }
 async function copyOut(){
-  const items=parseItems();if(!items.length)return notify("Paste some values first.");
-  const rows=makeRows(items),mode=format.value,p=plain(rows,mode);
+  const rawItems=parseItems();if(!rawItems.length)return notify("Paste some values first.");
+  const items=organizeItems(rawItems),rows=makeRows(items),mode=format.value,p=plain(rows,mode);
   try{
     if(mode==="word"&&navigator.clipboard&&window.ClipboardItem){
       await navigator.clipboard.write([new ClipboardItem({
@@ -242,8 +389,8 @@ async function copyOut(){
   }
 }
 function downloadOut(){
-  const items=parseItems();if(!items.length)return notify("Paste some values first.");
-  const rows=makeRows(items),mode=format.value;
+  const rawItems=parseItems();if(!rawItems.length)return notify("Paste some values first.");
+  const items=organizeItems(rawItems),rows=makeRows(items),mode=format.value;
   let content,mime,name;
   if(mode==="word"){content="<!doctype html><meta charset=utf-8>"+htmlTable(rows);mime="text/html;charset=utf-8";name="ip-table.html";}
   else if(mode==="csv"){content="\uFEFF"+plain(rows,mode);mime="text/csv;charset=utf-8";name="ip-table.csv";}
@@ -267,7 +414,10 @@ document.querySelectorAll(".format-btn").forEach(btn=>{
   btn.setAttribute("aria-pressed",btn.classList.contains("active") ? "true" : "false");
 });
 
-[input,columns,delimiter,empty].forEach(x=>{x.addEventListener("input",render);x.addEventListener("change",render)});
+[input,columns,delimiter,empty,organizeEnabled,sortBy,sortDirection,groupBy,subnetPrefix].forEach(x=>{
+  x.addEventListener("input",render);
+  x.addEventListener("change",render);
+});
 $("copy").onclick=copyOut;$("download").onclick=downloadOut;render();
 </script>
 </body>
