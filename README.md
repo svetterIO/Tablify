@@ -19,17 +19,6 @@ Turn raw lists into ready-to-paste tables. Tablify is a static GitHub Pages tool
 - No server and no dependencies
 - Input data stays in the browser
 
-## Publish on GitHub Pages
-
-1. Create a repository.
-2. Upload `index.html` to the repository root.
-3. Open **Settings > Pages**.
-4. Under **Build and deployment**, select **Deploy from a branch**.
-5. Choose your main branch and `/ (root)`.
-6. Save.
-
-The site will then be available at the GitHub Pages URL shown in the Pages settings.
-
 ## Local use
 
 You can open `index.html` directly. Clipboard functionality is most reliable when the page is served over HTTPS (GitHub Pages does this automatically).
