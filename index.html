@@ -7,7 +7,9 @@
 <style>
 :root{color-scheme:light dark;--bg:#0b1020;--panel:#121a2f;--text:#e5e7eb;--muted:#94a3b8;--border:#26324a;--accent:#3b82f6}
 *{box-sizing:border-box}body{margin:0;font-family:system-ui,-apple-system,Segoe UI,sans-serif;background:var(--bg);color:var(--text)}
-main{width:min(1150px,calc(100% - 32px));margin:auto;padding:40px 0}h1{margin:0 0 8px;font-size:clamp(2rem,5vw,3rem)}
+main{width:min(1150px,calc(100% - 32px));margin:auto;padding:40px 0}h1{margin:0;font-size:clamp(2rem,5vw,3rem)}
+.title-row{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:8px}
+.version-badge{display:inline-flex;align-items:center;justify-content:center;padding:4px 8px;border-radius:999px;border:1px solid var(--border);background:rgba(255,255,255,.04);color:var(--muted);font-size:.78rem;font-weight:700;letter-spacing:.02em}
 p{color:var(--muted)}.grid{display:grid;grid-template-columns:1.35fr .8fr;gap:20px}.card{background:var(--panel);border:1px solid var(--border);border-radius:16px;overflow:hidden}
 .head{padding:16px 18px;border-bottom:1px solid var(--border);font-weight:700}.body{padding:18px}
 textarea{width:100%;min-height:420px;resize:vertical;background:#0f172a;color:var(--text);border:1px solid var(--border);border-radius:10px;padding:12px;font:14px/1.5 monospace}
@@ -39,7 +41,7 @@ button{cursor:pointer;font-weight:700}button.primary{background:var(--accent);bo
 </head>
 <body>
 <main>
-<h1>Tablify</h1>
+<div class="title-row"><h1>Tablify</h1><span class="version-badge">v0.2</span></div>
 <p>Paste comma-separated values, one item per line, or an Excel table/range. Then copy or export it for Excel, Word, CSV, or any custom delimiter. Everything runs locally in your browser.</p>
 
 <div class="grid">
