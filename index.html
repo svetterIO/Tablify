@@ -98,7 +98,27 @@ pre{margin:0;max-height:500px;overflow:auto;white-space:pre;padding:16px;backgro
         <button type="button" id="clearBtn" style="width:auto;min-height:34px;padding:6px 11px">Clear</button>
       </div>
       <div class="body">
-        <textarea id="input" spellcheck="false" placeholder="192.168.1.10:3389, 192.168.1.11:443, 192.168.1.12:1433&#10;&#10;You can also paste one value per line or an Excel / Google Sheets range."></textarea>
+        <textarea id="input" spellcheck="false" placeholder="Supported examples:
+
+Comma-separated:
+192.168.1.10:3389, 192.168.1.11:443, 192.168.1.12:1433
+
+One per line:
+192.168.1.10:3389
+192.168.1.11:443
+192.168.1.12:1433
+
+Inherited ports:
+10.1.2.202:3389, 8443, 443
+
+Plain IPs:
+10.10.10.1
+10.10.10.2
+
+Excel / Google Sheets:
+Paste a copied cell range directly here.
+
+You can also drop TXT, CSV, TSV, or LOG files below."></textarea>
 
         <input id="fileInput" type="file" accept=".txt,.csv,.tsv,.log,text/plain,text/csv,text/tab-separated-values" hidden>
         <div class="drop-zone" id="dropZone" tabindex="0" role="button" aria-label="Import text, CSV, or TSV file">
@@ -304,7 +324,7 @@ pre{margin:0;max-height:500px;overflow:auto;white-space:pre;padding:16px;backgro
 <div id="toast" role="status" aria-live="polite"></div>
 
 <script>
-const VERSION="0.4.2";
+const VERSION="0.4.3";
 const $=id=>document.getElementById(id);
 
 const input=$("input"),fileInput=$("fileInput"),dropZone=$("dropZone"),format=$("format"),columns=$("columns"),empty=$("empty"),
