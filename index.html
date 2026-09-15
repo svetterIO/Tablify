@@ -240,6 +240,11 @@ pre{margin:0;max-height:500px;overflow:auto;white-space:pre;padding:16px;backgro
           <summary>Advanced transformations</summary>
 
           <label class="toggle">
+            <input id="expandInheritedPorts" type="checkbox" checked>
+            <span>Expand inherited ports (e.g. IP:3389, 8443)</span>
+          </label>
+
+          <label class="toggle">
             <input id="normalizeEndpoints" type="checkbox">
             <span>Normalize valid endpoints</span>
           </label>
@@ -298,7 +303,7 @@ pre{margin:0;max-height:500px;overflow:auto;white-space:pre;padding:16px;backgro
 <div id="toast" role="status" aria-live="polite"></div>
 
 <script>
-const VERSION="0.4";
+const VERSION="0.4.1";
 const $=id=>document.getElementById(id);
 
 const input=$("input"),fileInput=$("fileInput"),dropZone=$("dropZone"),format=$("format"),columns=$("columns"),empty=$("empty"),
@@ -306,7 +311,7 @@ delimiter=$("delimiter"),customBox=$("customBox"),validateEnabled=$("validateEna
 excludeInvalid=$("excludeInvalid"),splitEndpoint=$("splitEndpoint"),includeHeaders=$("includeHeaders"),splitHeaderRow=$("splitHeaderRow"),
 includeService=$("includeService"),serviceRow=$("serviceRow"),organizeEnabled=$("organizeEnabled"),organizeControls=$("organizeControls"),
 sortBy=$("sortBy"),sortDirection=$("sortDirection"),groupBy=$("groupBy"),subnetPrefix=$("subnetPrefix"),
-showGroupHeaders=$("showGroupHeaders"),normalizeEndpoints=$("normalizeEndpoints"),reverseOrder=$("reverseOrder"),
+showGroupHeaders=$("showGroupHeaders"),expandInheritedPorts=$("expandInheritedPorts"),normalizeEndpoints=$("normalizeEndpoints"),reverseOrder=$("reverseOrder"),
 forceSingleColumn=$("forceSingleColumn"),portsOnly=$("portsOnly"),ipsOnly=$("ipsOnly"),
 tablePreview=$("tablePreview"),rawPreview=$("rawPreview"),toast=$("toast");
 
@@ -355,10 +360,42 @@ const guides={
 };
 
 function parseInput(){
-  return input.value
+  const tokens=input.value
     .split(/[\t\r\n,;]+/)
     .map(x=>x.trim())
     .filter(Boolean);
+
+  if(!expandInheritedPorts.checked)return tokens;
+
+  const output=[];
+  let inheritedIp=null;
+
+  for(const token of tokens){
+    const full=token.match(/^(\d{1,3}(?:\.\d{1,3}){3})(?::(\d+))?$/);
+
+    if(full){
+      const octets=full[1].split(".").map(Number);
+      const validIp=octets.every(n=>Number.isInteger(n)&&n>=0&&n<=255);
+
+      if(validIp){
+        inheritedIp=full[1];
+        output.push(token);
+        continue;
+      }
+    }
+
+    if(inheritedIp && /^\d+$/.test(token)){
+      const port=Number(token);
+      if(Number.isInteger(port)&&port>=0&&port<=65535){
+        output.push(`${inheritedIp}:${port}`);
+        continue;
+      }
+    }
+
+    output.push(token);
+  }
+
+  return output;
 }
 
 function parseEndpoint(value){
@@ -922,7 +959,7 @@ document.querySelectorAll(".preview-btn").forEach(btn=>{
 [
   input,columns,empty,delimiter,validateEnabled,duplicateMode,excludeInvalid,splitEndpoint,includeHeaders,includeService,
   organizeEnabled,sortBy,sortDirection,groupBy,subnetPrefix,showGroupHeaders,
-  normalizeEndpoints,reverseOrder,forceSingleColumn,portsOnly,ipsOnly
+  expandInheritedPorts,normalizeEndpoints,reverseOrder,forceSingleColumn,portsOnly,ipsOnly
 ].forEach(node=>{
   node.addEventListener("input",render);
   node.addEventListener("change",render);
