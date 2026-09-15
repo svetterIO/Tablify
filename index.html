@@ -215,6 +215,7 @@ pre{margin:0;max-height:500px;overflow:auto;white-space:pre;padding:16px;backgro
               <label for="groupBy">Group by</label>
               <select id="groupBy">
                 <option value="none">No grouping</option>
+                <option value="ip">IP (combine ports)</option>
                 <option value="subnet">Subnet</option>
                 <option value="port">Port</option>
                 <option value="service">Service</option>
@@ -303,7 +304,7 @@ pre{margin:0;max-height:500px;overflow:auto;white-space:pre;padding:16px;backgro
 <div id="toast" role="status" aria-live="polite"></div>
 
 <script>
-const VERSION="0.4.1";
+const VERSION="0.4.2";
 const $=id=>document.getElementById(id);
 
 const input=$("input"),fileInput=$("fileInput"),dropZone=$("dropZone"),format=$("format"),columns=$("columns"),empty=$("empty"),
@@ -526,6 +527,7 @@ function groupLabel(item){
   if(!organizeEnabled.checked||groupBy.value==="none")return null;
   const key=keyFor(item.endpoint,groupBy.value);
   if(!key){
+    if(groupBy.value==="ip")return "No detectable IP";
     if(groupBy.value==="port")return "No detectable port";
     if(groupBy.value==="service")return "Unknown service";
     return "No detectable subnet";
@@ -574,16 +576,50 @@ function buildData(items){
     const rows=[];
 
     if(split){
-      for(const item of g.items){
-        const ep=item.endpoint;
+      const combinePorts=organizeEnabled.checked&&groupBy.value==="ip";
+
+      if(combinePorts&&g.items.length&&g.items[0].endpoint.ip){
+        const ip=g.items[0].endpoint.ip;
+        const seenPorts=new Set();
+        const ports=[];
+        const seenServices=new Set();
+        const services=[];
+
+        for(const item of g.items){
+          const ep=item.endpoint;
+          if(ep.port!==null){
+            const port=String(ep.port);
+            if(!seenPorts.has(port)){
+              seenPorts.add(port);
+              ports.push(port);
+            }
+          }
+          if(includeService.checked&&ep.service&&!seenServices.has(ep.service)){
+            seenServices.add(ep.service);
+            services.push(ep.service);
+          }
+        }
+
         const row=[
-          {text:ep.ip??item.value,invalid:validateEnabled.checked&&!ep.valid,className:""},
-          {text:ep.port===null?"":String(ep.port),invalid:validateEnabled.checked&&!ep.valid,className:""}
+          {text:ip,invalid:false,className:""},
+          {text:ports.join(", "),invalid:false,className:""}
         ];
         if(includeService.checked){
-          row.push({text:ep.service||"",invalid:false,className:"service"});
+          row.push({text:services.join(", "),invalid:false,className:"service"});
         }
         rows.push(row);
+      }else{
+        for(const item of g.items){
+          const ep=item.endpoint;
+          const row=[
+            {text:ep.ip??item.value,invalid:validateEnabled.checked&&!ep.valid,className:""},
+            {text:ep.port===null?"":String(ep.port),invalid:validateEnabled.checked&&!ep.valid,className:""}
+          ];
+          if(includeService.checked){
+            row.push({text:ep.service||"",invalid:false,className:"service"});
+          }
+          rows.push(row);
+        }
       }
     }else{
       for(let i=0;i<g.items.length;i+=cols){
@@ -668,7 +704,7 @@ function renderTable(dataset){
 
   h+="<tbody>";
   for(const group of dataset.groups){
-    if(group.label&&showGroupHeaders.checked){
+    if(group.label&&showGroupHeaders.checked&&!(splitEndpoint.checked&&groupBy.value==="ip")){
       h+=`<tr class="group-row"><td colspan="${totalCols}">${escapeHtml(group.label)} · ${group.rows.length} row${group.rows.length===1?"":"s"}</td></tr>`;
     }
     for(const row of group.rows){
@@ -702,6 +738,10 @@ function updateDownloadLabel(){
 function render(){
   if(ipsOnly.checked&&portsOnly.checked)portsOnly.checked=false;
 
+  if(splitEndpoint.checked&&organizeEnabled.checked&&groupBy.value==="none"){
+    groupBy.value="ip";
+  }
+
   const raw=parseInput();
   const analysis=analyzeRaw(raw);
   const items=processItems(raw);
@@ -712,7 +752,8 @@ function render(){
   $("validCount").textContent=`${analysis.endpoints.filter(e=>e.valid).length} valid`;
   $("invalidCount").textContent=`${analysis.invalid.length} issue${analysis.invalid.length===1?"":"s"}`;
   $("duplicateCount").textContent=`${analysis.duplicateTotal} duplicate${analysis.duplicateTotal===1?"":"s"}`;
-  $("outputCount").textContent=`${items.length} output`;
+  const outputRows=dataset.groups.reduce((sum,g)=>sum+g.rows.length,0);
+  $("outputCount").textContent=`${outputRows} output row${outputRows===1?"":"s"}`;
 
   $("validCount").style.display=validateEnabled.checked?"inline-flex":"none";
   $("invalidCount").style.display=validateEnabled.checked?"inline-flex":"none";
@@ -727,7 +768,7 @@ function render(){
   includeService.disabled=!splitEndpoint.checked;
   organizeControls.hidden=!organizeEnabled.checked;
   subnetPrefix.disabled=!(organizeEnabled.checked&&(groupBy.value==="subnet"||sortBy.value==="subnet"));
-  showGroupHeaders.disabled=!(organizeEnabled.checked&&groupBy.value!=="none");
+  showGroupHeaders.disabled=!(organizeEnabled.checked&&groupBy.value!=="none")||(splitEndpoint.checked&&groupBy.value==="ip");
 
   if(splitEndpoint.checked){
     ipsOnly.checked=false;portsOnly.checked=false;
